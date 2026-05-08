@@ -27,6 +27,15 @@ function resolveUpstream(pathname: string, search: string): { url: string; outbo
   /** 前缀长的优先，避免误匹配 */
   const tryRules: Array<{ prefix: string; resolve: () => string; outbound: Outbound }> = [
     {
+      prefix: '/api/36kr-feed',
+      resolve: () => `https://36kr.com/feed${q}`,
+      outbound: {
+        'User-Agent': CHROME_UA,
+        Referer: 'https://36kr.com/',
+        Accept: 'application/rss+xml, application/xml, text/xml, */*',
+      },
+    },
+    {
       prefix: '/api/36kr-gateway',
       resolve: () => `https://gateway.36kr.com${pathname.replace(/^\/api\/36kr-gateway/, '') || '/'}${q}`,
       outbound: {

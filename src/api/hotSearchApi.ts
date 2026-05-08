@@ -166,11 +166,35 @@ export class HotSearchApi {
         },
         body,
       });
-      if (!response.ok) return [];
+      if (!response.ok) return this.fetch36krFeedFallback();
       const data = await response.json();
-      return this.parse36krHotData(data);
+      const list = this.parse36krHotData(data);
+      return list.length > 0 ? list : this.fetch36krFeedFallback();
     } catch (error) {
       console.error('获取36氪热榜失败:', error);
+      return this.fetch36krFeedFallback();
+    }
+  }
+
+  private async fetch36krFeedFallback(): Promise<HotSearchItem[]> {
+    try {
+      const response = await this.fetchWithTimeout('/api/36kr-feed', {
+        headers: {
+          Accept: 'application/rss+xml, application/xml, text/xml, */*',
+        },
+      });
+      if (!response.ok) return [];
+      const xml = await response.text();
+      return this.parseRss2AsHotItems(xml, {
+        source: '36kr',
+        sourceName: '36氪',
+        sourceColor: '#0080FF',
+        idPrefix: '36kr',
+        max: 30,
+        tagSlugs: ['news', '热门', '实时'],
+      });
+    } catch (error) {
+      console.error('获取36氪RSS兜底失败:', error);
       return [];
     }
   }

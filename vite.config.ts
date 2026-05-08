@@ -73,6 +73,16 @@ const devProxy = {
       'Accept': 'application/json, text/plain, */*',
     },
   },
+  '/api/36kr-feed': {
+    target: 'https://36kr.com',
+    changeOrigin: true,
+    rewrite: (path: string) => path.replace(/^\/api\/36kr-feed/, '/feed'),
+    headers: {
+      'User-Agent': UA,
+      'Referer': 'https://36kr.com/',
+      'Accept': 'application/rss+xml, application/xml, text/xml, */*',
+    },
+  },
   '/api/ithome': {
     target: 'https://api.ithome.com',
     changeOrigin: true,
