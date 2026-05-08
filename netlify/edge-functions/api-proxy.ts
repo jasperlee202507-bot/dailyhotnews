@@ -8,6 +8,12 @@ const MOBILE_UA =
   'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1';
 
 type Outbound = Record<string, string>;
+type ResolvedUpstream = {
+  url: string | string[];
+  outbound: Outbound;
+  timeoutMs?: number;
+  maxAttempts?: number;
+};
 
 function mergeHeaders(incoming: Request, outbound: Outbound): Headers {
   const h = new Headers();
@@ -21,19 +27,46 @@ function mergeHeaders(incoming: Request, outbound: Outbound): Headers {
   return h;
 }
 
-function resolveUpstream(pathname: string, search: string): { url: string; outbound: Outbound } | null {
+function resolveUpstream(pathname: string, search: string): ResolvedUpstream | null {
   const q = search || '';
 
   /** 前缀长的优先，避免误匹配 */
-  const tryRules: Array<{ prefix: string; resolve: () => string; outbound: Outbound }> = [
+  const tryRules: Array<{
+    prefix: string;
+    resolve: () => string | string[];
+    outbound: Outbound;
+    timeoutMs?: number;
+    maxAttempts?: number;
+  }> = [
     {
-      prefix: '/api/36kr-feed',
-      resolve: () => `https://www.36kr.com/feed${q}`,
+      prefix: '/api/36kr-dailyhot',
+      resolve: () => [
+        `https://api-hot.imsyy.top/36kr/new${q}`,
+        `https://api-hot.imsyy.top/36kr${q}`,
+        `https://api.vvhan.com/api/hotlist/36Ke${q}`,
+        `http://api.guiguiya.com/api/hotlist/36kr?type=hot`,
+      ],
       outbound: {
         'User-Agent': CHROME_UA,
-        Referer: 'https://www.36kr.com/',
+        Referer: 'https://36kr.com/',
+        Accept: 'application/json, text/plain, */*',
+      },
+      timeoutMs: 8000,
+      maxAttempts: 1,
+    },
+    {
+      prefix: '/api/36kr-feed',
+      resolve: () => [
+        `https://www.36kr.com/feed${q}`,
+        `https://36kr.com/feed${q}`,
+      ],
+      outbound: {
+        'User-Agent': CHROME_UA,
+        Referer: 'https://36kr.com/',
         Accept: 'application/rss+xml, application/xml, text/xml, */*',
       },
+      timeoutMs: 8000,
+      maxAttempts: 1,
     },
     {
       prefix: '/api/36kr-gateway',
@@ -45,6 +78,8 @@ function resolveUpstream(pathname: string, search: string): { url: string; outbo
         Accept: 'application/json, text/plain, */*',
         'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
       },
+      timeoutMs: 6000,
+      maxAttempts: 1,
     },
     {
       prefix: '/api/segmentfault',
@@ -198,42 +233,80 @@ async function sleep(ms: number): Promise<void> {
   await new Promise((r) => setTimeout(r, ms));
 }
 
+function isRetryableStatus(status: number): boolean {
+  return status === 408 || status === 429 || status >= 500;
+}
+
+async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs?: number): Promise<Response> {
+  if (!timeoutMs) return fetch(url, init);
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, {
+      ...init,
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /**
  * 发起上游 fetch 并整包读入再返回（避免流式回传触发 HTTP/2 协议错误）。
  * 对「读 body 时断连」类错误做有限次重试。
  */
 async function fetchUpstreamBuffered(
-  url: string,
+  url: string | string[],
   init: RequestInit,
   maxAttempts = 3,
+  timeoutMs?: number,
 ): Promise<Response> {
+  const urls = Array.isArray(url) ? url : [url];
   let last: unknown;
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    try {
-      const upstream = await fetch(url, {
-        ...init,
-        redirect: 'follow',
-        cache: 'no-store',
-      });
-      const buf = await upstream.arrayBuffer();
-      const out = new Headers();
-      const ct = upstream.headers.get('content-type');
-      if (ct) out.set('content-type', ct);
-      else if (buf.byteLength > 0) out.set('content-type', 'application/octet-stream');
-      const cc = upstream.headers.get('cache-control');
-      if (cc) out.set('cache-control', cc);
+  for (const upstreamUrl of urls) {
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        const upstream = await fetchWithTimeout(
+          upstreamUrl,
+          {
+            ...init,
+            redirect: 'follow',
+            cache: 'no-store',
+          },
+          timeoutMs,
+        );
+        const buf = await upstream.arrayBuffer();
+        const out = new Headers();
+        const ct = upstream.headers.get('content-type');
+        if (ct) out.set('content-type', ct);
+        else if (buf.byteLength > 0) out.set('content-type', 'application/octet-stream');
+        const cc = upstream.headers.get('cache-control');
+        if (cc) out.set('cache-control', cc);
 
-      return new Response(buf, {
-        status: upstream.status,
-        statusText: upstream.statusText,
-        headers: out,
-      });
-    } catch (e) {
-      last = e;
-      if (attempt === maxAttempts || !isTransientFetchBodyError(e)) {
-        throw e;
+        const response = new Response(buf, {
+          status: upstream.status,
+          statusText: upstream.statusText,
+          headers: out,
+        });
+
+        const shouldTryAnotherUrl = urls.length > 1 && !upstream.ok && upstreamUrl !== urls[urls.length - 1];
+        const shouldRetrySameUrl = isRetryableStatus(upstream.status) && attempt < maxAttempts;
+        if (shouldTryAnotherUrl || shouldRetrySameUrl) {
+          last = new Error(`upstream ${upstream.status} from ${upstreamUrl}`);
+          await sleep(100 * attempt);
+          continue;
+        }
+
+        return response;
+      } catch (e) {
+        last = e;
+        if (attempt < maxAttempts && isTransientFetchBodyError(e)) {
+          await sleep(100 * attempt);
+          continue;
+        }
+        break;
       }
-      await sleep(100 * attempt);
     }
   }
   throw last;
@@ -293,7 +366,7 @@ export default async function handler(request: Request): Promise<Response> {
       method,
       headers,
       body,
-    });
+    }, resolved.maxAttempts, resolved.timeoutMs);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'unknown edge proxy error';
     return new Response(`API proxy failed: ${message}`, {

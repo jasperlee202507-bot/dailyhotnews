@@ -174,7 +174,7 @@ export class HotSearchApi {
           },
           body,
         },
-        12000,
+        7000,
       );
       if (!response.ok) return [];
       const data = await response.json();
@@ -186,42 +186,82 @@ export class HotSearchApi {
 
   async fetch36krHot(): Promise<HotSearchItem[]> {
     try {
-      const [fromGateway, fromRss] = await Promise.all([
+      const [fromGateway, fromDailyHot, fromRss] = await Promise.all([
         this.fetch36krGatewayHot(),
+        this.fetch36krDailyHotFallback(),
         this.fetch36krFeedFallback(),
       ]);
-      return fromGateway.length > 0 ? fromGateway : fromRss;
+      return fromGateway.length > 0 ? fromGateway : (fromDailyHot.length > 0 ? fromDailyHot : fromRss);
     } catch (error) {
       console.error('获取36氪热榜失败:', error);
-      return this.fetch36krFeedFallback();
+      const fromDailyHot = await this.fetch36krDailyHotFallback();
+      return fromDailyHot.length > 0 ? fromDailyHot : this.fetch36krFeedFallback();
     }
   }
 
-  private async fetch36krFeedFallback(): Promise<HotSearchItem[]> {
+  /** 官方 36kr 链路在 Netlify 上容易被 TLS/风控拦截，补一个 JSON 热榜源。 */
+  private async fetch36krDailyHotFallback(): Promise<HotSearchItem[]> {
     try {
-      const response = await this.fetchWithTimeout(
-        '/api/36kr-feed',
-        {
-          headers: {
-            Accept: 'application/rss+xml, application/xml, text/xml, */*',
-          },
-        },
-        35000,
-      );
+      const response = await this.fetchWithTimeout('/api/36kr-dailyhot', {
+        headers: { Accept: 'application/json, text/plain, */*' },
+      }, 12_000);
       if (!response.ok) return [];
-      const xml = await response.text();
-      return this.parseRss2AsHotItems(xml, {
-        source: '36kr',
-        sourceName: '36氪',
-        sourceColor: '#0080FF',
-        idPrefix: '36kr',
-        max: 30,
-        tagSlugs: ['news', '热门', '实时'],
-      });
+      const text = await response.text();
+      const trimmed = text.replace(/^\uFEFF/, '').trim();
+      if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) return [];
+      const data = JSON.parse(trimmed) as unknown;
+      return this.parse36krFallbackData(data);
     } catch (error) {
-      console.error('获取36氪RSS兜底失败:', error);
+      console.error('获取36氪JSON兜底失败:', error);
       return [];
     }
+  }
+
+  /**
+   * 生产环境由 Netlify Edge 代理自动尝试 RSSHub 热榜与官方 RSS。
+   * 这里保持短超时，避免 36 氪上游不可达时拖慢整页刷新。
+   */
+  private async fetch36krFeedFallback(): Promise<HotSearchItem[]> {
+    const rssTimeoutMs = 15_000;
+    const opts: RequestInit = {
+      headers: {
+        Accept: 'application/rss+xml, application/xml, text/xml, */*',
+      },
+    };
+    const parseOpts = {
+      source: '36kr',
+      sourceName: '36氪',
+      sourceColor: '#0080FF',
+      idPrefix: '36kr',
+      max: 30,
+      tagSlugs: ['news', '热门', '实时'],
+    };
+
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const response = await this.fetchWithTimeout('/api/36kr-feed', opts, rssTimeoutMs);
+        if (!response.ok) {
+          if (response.status >= 500 && attempt === 0) {
+            await new Promise((r) => setTimeout(r, 1500));
+            continue;
+          }
+          return [];
+        }
+        const xml = await response.text();
+        return this.parseRss2AsHotItems(xml, parseOpts);
+      } catch (error) {
+        const isAbort =
+          (error instanceof DOMException && error.name === 'AbortError') ||
+          (error instanceof Error && error.name === 'AbortError');
+        if (isAbort && attempt === 0) {
+          await new Promise((r) => setTimeout(r, 2000));
+          continue;
+        }
+        console.error('获取36氪RSS兜底失败:', error);
+        return [];
+      }
+    }
+    return [];
   }
 
   async fetchIthomeNews(): Promise<HotSearchItem[]> {
@@ -324,6 +364,81 @@ export class HotSearchApi {
         originalUrl: `https://www.36kr.com/p/${iid}`,
         tags: ['news', '热门', '实时'],
         publishTime: new Date(),
+      });
+    });
+
+    return items;
+  }
+
+  private parse36krFallbackData(data: unknown): HotSearchItem[] {
+    const payload = data as {
+      data?: unknown[] | { list?: unknown[]; items?: unknown[] };
+      result?: unknown[] | { list?: unknown[]; items?: unknown[] };
+    };
+    const candidate =
+      Array.isArray(payload?.data)
+        ? payload.data
+        : Array.isArray(payload?.data?.list)
+          ? payload.data.list
+          : Array.isArray(payload?.data?.items)
+            ? payload.data.items
+            : Array.isArray(payload?.result)
+              ? payload.result
+              : Array.isArray(payload?.result?.list)
+                ? payload.result.list
+                : Array.isArray(payload?.result?.items)
+                  ? payload.result.items
+                  : [];
+
+    const items: HotSearchItem[] = [];
+    candidate.slice(0, 30).forEach((raw: unknown, index) => {
+      const row = raw as {
+        id?: number | string;
+        itemId?: number | string;
+        title?: string;
+        name?: string;
+        word?: string;
+        desc?: string;
+        description?: string;
+        excerpt?: string;
+        author?: string;
+        authorName?: string;
+        hot?: number | string;
+        views?: number | string;
+        heat?: number | string;
+        url?: string;
+        link?: string;
+        mobileUrl?: string;
+        cover?: string;
+        image?: string;
+        pic?: string;
+        timestamp?: number | string;
+      };
+      const title = (row.title || row.name || row.word || '').trim();
+      if (!title) return;
+
+      const rawId = row.id ?? row.itemId;
+      const fallbackUrl = rawId ? `https://www.36kr.com/p/${rawId}` : `https://www.36kr.com/`;
+      const originalUrl = (row.url || row.link || row.mobileUrl || fallbackUrl).trim();
+      const hotScore = Number(String(row.hot ?? row.views ?? row.heat ?? '').replace(/[^\d.]/g, '')) || (300_000 - index * 1000);
+      const ts = Number(row.timestamp);
+      const publishTime = Number.isFinite(ts) && ts > 0
+        ? new Date(ts > 10_000_000_000 ? ts : ts * 1000)
+        : new Date();
+      const summary = (row.desc || row.description || row.excerpt || row.author || row.authorName || '').trim();
+
+      items.push({
+        id: this.stableIdFromArticleUrl('36kr', originalUrl || `${fallbackUrl}-${index}`),
+        title,
+        summary,
+        source: '36kr',
+        sourceName: '36氪',
+        sourceColor: '#0080FF',
+        hotScore,
+        imageUrl: row.cover || row.image || row.pic,
+        originalUrl,
+        tags: ['news', '热门', '实时'],
+        publishTime,
       });
     });
 
