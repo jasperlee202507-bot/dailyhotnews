@@ -28,10 +28,10 @@ function resolveUpstream(pathname: string, search: string): { url: string; outbo
   const tryRules: Array<{ prefix: string; resolve: () => string; outbound: Outbound }> = [
     {
       prefix: '/api/36kr-feed',
-      resolve: () => `https://36kr.com/feed${q}`,
+      resolve: () => `https://www.36kr.com/feed${q}`,
       outbound: {
         'User-Agent': CHROME_UA,
-        Referer: 'https://36kr.com/',
+        Referer: 'https://www.36kr.com/',
         Accept: 'application/rss+xml, application/xml, text/xml, */*',
       },
     },
@@ -186,6 +186,59 @@ function resolveUpstream(pathname: string, search: string): { url: string; outbo
   return null;
 }
 
+/** 上游在 TLS/HTTP2 下偶发「读体读到一半断连」；重试常能恢复。 */
+function isTransientFetchBodyError(e: unknown): boolean {
+  const msg = e instanceof Error ? e.message : String(e);
+  return /body from connection|connection reset|broken pipe|UnexpectedEof|unexpected eof|incomplete message|stream error|ECONNRESET|peer closed/i.test(
+    msg,
+  );
+}
+
+async function sleep(ms: number): Promise<void> {
+  await new Promise((r) => setTimeout(r, ms));
+}
+
+/**
+ * 发起上游 fetch 并整包读入再返回（避免流式回传触发 HTTP/2 协议错误）。
+ * 对「读 body 时断连」类错误做有限次重试。
+ */
+async function fetchUpstreamBuffered(
+  url: string,
+  init: RequestInit,
+  maxAttempts = 3,
+): Promise<Response> {
+  let last: unknown;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const upstream = await fetch(url, {
+        ...init,
+        redirect: 'follow',
+        cache: 'no-store',
+      });
+      const buf = await upstream.arrayBuffer();
+      const out = new Headers();
+      const ct = upstream.headers.get('content-type');
+      if (ct) out.set('content-type', ct);
+      else if (buf.byteLength > 0) out.set('content-type', 'application/octet-stream');
+      const cc = upstream.headers.get('cache-control');
+      if (cc) out.set('cache-control', cc);
+
+      return new Response(buf, {
+        status: upstream.status,
+        statusText: upstream.statusText,
+        headers: out,
+      });
+    } catch (e) {
+      last = e;
+      if (attempt === maxAttempts || !isTransientFetchBodyError(e)) {
+        throw e;
+      }
+      await sleep(100 * attempt);
+    }
+  }
+  throw last;
+}
+
 export default async function handler(request: Request): Promise<Response> {
   try {
     const url = new URL(request.url);
@@ -232,30 +285,14 @@ export default async function handler(request: Request): Promise<Response> {
       }
     }
 
-    const upstream = await fetch(resolved.url, {
+    /**
+     * 勿把 upstream.body 直接管道回浏览器：在 Netlify HTTP/2 下易触发
+     * net::ERR_HTTP2_PROTOCOL_ERROR。整包缓冲；瞬时读体失败见 fetchUpstreamBuffered 重试。
+     */
+    return await fetchUpstreamBuffered(resolved.url, {
       method,
       headers,
       body,
-      redirect: 'follow',
-    });
-
-  /**
-   * 勿把 upstream.body 直接管道回浏览器：在 Netlify HTTP/2 下易触发
-   * net::ERR_HTTP2_PROTOCOL_ERROR（帧/Content-Length 与流式体不一致）。
-   * 先读成 ArrayBuffer 再返回，体量对热榜/RSS 可接受。
-   */
-    const buf = await upstream.arrayBuffer();
-    const out = new Headers();
-    const ct = upstream.headers.get('content-type');
-    if (ct) out.set('content-type', ct);
-    else if (buf.byteLength > 0) out.set('content-type', 'application/octet-stream');
-    const cc = upstream.headers.get('cache-control');
-    if (cc) out.set('cache-control', cc);
-
-    return new Response(buf, {
-      status: upstream.status,
-      statusText: upstream.statusText,
-      headers: out,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'unknown edge proxy error';

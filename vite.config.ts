@@ -74,12 +74,12 @@ const devProxy = {
     },
   },
   '/api/36kr-feed': {
-    target: 'https://36kr.com',
+    target: 'https://www.36kr.com',
     changeOrigin: true,
     rewrite: (path: string) => path.replace(/^\/api\/36kr-feed/, '/feed'),
     headers: {
       'User-Agent': UA,
-      'Referer': 'https://36kr.com/',
+      'Referer': 'https://www.36kr.com/',
       'Accept': 'application/rss+xml, application/xml, text/xml, */*',
     },
   },

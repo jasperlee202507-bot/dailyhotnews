@@ -30,9 +30,14 @@ export class HotSearchApi {
     this.config = { ...defaultConfig, ...config };
   }
 
-  private async fetchWithTimeout(url: string, options: RequestInit = {}, timeout = 15000): Promise<Response> {
+  private async fetchWithTimeout(
+    url: string,
+    options: RequestInit = {},
+    timeoutMs?: number,
+  ): Promise<Response> {
+    const ms = timeoutMs ?? this.config.timeout ?? 15000;
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeout);
+    const timeoutId = setTimeout(() => controller.abort(), ms);
 
     try {
       const response = await fetch(url, {
@@ -151,25 +156,41 @@ export class HotSearchApi {
     }
   }
 
-  async fetch36krHot(): Promise<HotSearchItem[]> {
+  /** 网关热榜；失败或空列表返回 []（不拉 RSS，便于与 RSS 并行）。 */
+  private async fetch36krGatewayHot(): Promise<HotSearchItem[]> {
     try {
       const body = JSON.stringify({
         partner_id: 'wap',
         param: { siteId: 1, platformId: 2 },
         timestamp: Date.now(),
       });
-      const response = await this.fetchWithTimeout('/api/36kr-gateway/api/mis/nav/home/nav/rank/hot', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json; charset=utf-8',
-          Accept: 'application/json, text/plain, */*',
+      const response = await this.fetchWithTimeout(
+        '/api/36kr-gateway/api/mis/nav/home/nav/rank/hot',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json; charset=utf-8',
+            Accept: 'application/json, text/plain, */*',
+          },
+          body,
         },
-        body,
-      });
-      if (!response.ok) return this.fetch36krFeedFallback();
+        12000,
+      );
+      if (!response.ok) return [];
       const data = await response.json();
-      const list = this.parse36krHotData(data);
-      return list.length > 0 ? list : this.fetch36krFeedFallback();
+      return this.parse36krHotData(data);
+    } catch {
+      return [];
+    }
+  }
+
+  async fetch36krHot(): Promise<HotSearchItem[]> {
+    try {
+      const [fromGateway, fromRss] = await Promise.all([
+        this.fetch36krGatewayHot(),
+        this.fetch36krFeedFallback(),
+      ]);
+      return fromGateway.length > 0 ? fromGateway : fromRss;
     } catch (error) {
       console.error('获取36氪热榜失败:', error);
       return this.fetch36krFeedFallback();
@@ -178,11 +199,15 @@ export class HotSearchApi {
 
   private async fetch36krFeedFallback(): Promise<HotSearchItem[]> {
     try {
-      const response = await this.fetchWithTimeout('/api/36kr-feed', {
-        headers: {
-          Accept: 'application/rss+xml, application/xml, text/xml, */*',
+      const response = await this.fetchWithTimeout(
+        '/api/36kr-feed',
+        {
+          headers: {
+            Accept: 'application/rss+xml, application/xml, text/xml, */*',
+          },
         },
-      });
+        35000,
+      );
       if (!response.ok) return [];
       const xml = await response.text();
       return this.parseRss2AsHotItems(xml, {
