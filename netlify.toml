@@ -1,5 +1,4 @@
 # Netlify 部署：https://docs.netlify.com/configure-builds/overview/
-# 在 app.netlify.com 关联仓库后，一般无需改「构建设置」，本文件会覆盖默认命令与发布目录。
 
 [build]
   command = "npm run build"
@@ -8,115 +7,8 @@
 [build.environment]
   NODE_VERSION = "20"
 
-# 生产环境与本地 dev 一样：前端请求 /api/*，由 Netlify 反向代理到各站点（对应 vite.config.ts 里的 proxy）。
-# 注意：部分站点可能对 Netlify 出口 IP 限流；若某源失败，可先在 Network 里看 /api/* 响应。
-[[redirects]]
-  from = "/api/aihot/*"
-  to = "https://aihot.virxact.com/api/:splat"
-  status = 200
-  force = true
-
-[[redirects]]
-  from = "/api/bilibili/*"
-  to = "https://api.bilibili.com/:splat"
-  status = 200
-  force = true
-
-[[redirects]]
-  from = "/api/weibo/*"
-  to = "https://weibo.com/:splat"
-  status = 200
-  force = true
-
-[[redirects]]
-  from = "/api/zhihu-api/*"
-  to = "https://api.zhihu.com/:splat"
-  status = 200
-  force = true
-
-[[redirects]]
-  from = "/api/github/*"
-  to = "https://api.github.com/:splat"
-  status = 200
-  force = true
-
-[[redirects]]
-  from = "/api/juejin/*"
-  to = "https://api.juejin.cn/:splat"
-  status = 200
-  force = true
-
-[[redirects]]
-  from = "/api/36kr-gateway/*"
-  to = "https://gateway.36kr.com/:splat"
-  status = 200
-  force = true
-
-[[redirects]]
-  from = "/api/ithome/*"
-  to = "https://api.ithome.com/:splat"
-  status = 200
-  force = true
-
-[[redirects]]
-  from = "/api/aweme/*"
-  to = "https://aweme.snssdk.com/:splat"
-  status = 200
-  force = true
-
-[[redirects]]
-  from = "/api/csdn/*"
-  to = "https://blog.csdn.net/:splat"
-  status = 200
-  force = true
-
-[[redirects]]
-  from = "/api/oschina/*"
-  to = "https://www.oschina.net/:splat"
-  status = 200
-  force = true
-
-[[redirects]]
-  from = "/api/segmentfault/*"
-  to = "https://segmentfault.com/:splat"
-  status = 200
-  force = true
-
-[[redirects]]
-  from = "/api/infoq/*"
-  to = "https://www.infoq.cn/:splat"
-  status = 200
-  force = true
-
-[[redirects]]
-  from = "/api/ruanyifeng/*"
-  to = "http://www.ruanyifeng.com/:splat"
-  status = 200
-  force = true
-
-[[redirects]]
-  from = "/api/stcn/*"
-  to = "https://www.stcn.com/:splat"
-  status = 200
-  force = true
-
-[[redirects]]
-  from = "/api/caixin/"
-  to = "https://www.caixin.com/"
-  status = 200
-  force = true
-
-[[redirects]]
-  from = "/api/caixin"
-  to = "https://www.caixin.com/"
-  status = 200
-  force = true
-
-[[redirects]]
-  from = "/api/caixin/*"
-  to = "https://www.caixin.com/:splat"
-  status = 200
-  force = true
+# /api/* 由 netlify/edge-functions/api-proxy.ts 代理（见文件内 export const config），
+# 注入与 vite.config 一致的 Referer / Origin / UA。勿再对 /api 使用 redirects 代理。
 
 # React Router 浏览器端路由：必须放在最后
 [[redirects]]
