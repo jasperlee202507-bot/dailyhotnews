@@ -229,13 +229,21 @@ export default async function handler(request: Request): Promise<Response> {
     redirect: 'follow',
   });
 
+  /**
+   * 勿把 upstream.body 直接管道回浏览器：在 Netlify HTTP/2 下易触发
+   * net::ERR_HTTP2_PROTOCOL_ERROR（帧/Content-Length 与流式体不一致）。
+   * 先读成 ArrayBuffer 再返回，体量对热榜/RSS 可接受。
+   */
+  const buf = await upstream.arrayBuffer();
   const out = new Headers();
   const ct = upstream.headers.get('content-type');
   if (ct) out.set('content-type', ct);
+  else if (buf.byteLength > 0) out.set('content-type', 'application/octet-stream');
   const cc = upstream.headers.get('cache-control');
   if (cc) out.set('cache-control', cc);
+  out.set('content-length', String(buf.byteLength));
 
-  return new Response(upstream.body, {
+  return new Response(buf, {
     status: upstream.status,
     statusText: upstream.statusText,
     headers: out,
