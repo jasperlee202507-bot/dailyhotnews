@@ -240,15 +240,17 @@ export class HotSearchApi {
     return items;
   }
 
-  private parse36krHotData(data: { code?: number; data?: { hotRankList?: unknown[] } }): HotSearchItem[] {
+  private parse36krHotData(data: { code?: number | string; data?: { hotRankList?: unknown[] } }): HotSearchItem[] {
     const items: HotSearchItem[] = [];
-    const list = data?.code === 0 ? data.data?.hotRankList : undefined;
+    const codeOk = Number(data?.code) === 0;
+    const list = codeOk ? data.data?.hotRankList : undefined;
     if (!Array.isArray(list)) return items;
 
     list.forEach((raw: unknown) => {
       const row = raw as {
         itemId?: number | string;
         templateMaterial?: {
+          itemId?: number | string;
           widgetTitle?: string;
           widgetImage?: string;
           authorName?: string;
@@ -257,7 +259,8 @@ export class HotSearchApi {
       };
       const m = row.templateMaterial;
       const title = (m?.widgetTitle || '').trim();
-      const iid = row.itemId != null ? String(row.itemId) : '';
+      const rawId = row.itemId ?? m?.itemId;
+      const iid = rawId != null ? String(rawId) : '';
       if (!title || !iid) return;
 
       items.push({
