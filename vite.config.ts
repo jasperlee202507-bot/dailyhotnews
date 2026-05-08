@@ -142,12 +142,12 @@ const devProxy = {
     },
   },
   '/api/ruanyifeng': {
-    target: 'http://www.ruanyifeng.com',
+    target: 'https://www.ruanyifeng.com',
     changeOrigin: true,
     rewrite: (path: string) => path.replace(/^\/api\/ruanyifeng/, ''),
     headers: {
       'User-Agent': UA,
-      Referer: 'http://www.ruanyifeng.com/blog/',
+      Referer: 'https://www.ruanyifeng.com/blog/',
       Accept: 'application/atom+xml, application/xml, text/xml, */*',
     },
   },

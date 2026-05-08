@@ -101,12 +101,22 @@ function resolveUpstream(pathname: string, search: string): ResolvedUpstream | n
     },
     {
       prefix: '/api/ruanyifeng',
-      resolve: () => `http://www.ruanyifeng.com${pathname.replace(/^\/api\/ruanyifeng/, '') || '/'}${q}`,
+      resolve: () => {
+        const rest = pathname.replace(/^\/api\/ruanyifeng/, '') || '/';
+        return [
+          `https://www.ruanyifeng.com${rest}${q}`,
+          `https://ruanyifeng.com${rest}${q}`,
+          `http://www.ruanyifeng.com${rest}${q}`,
+          `http://feeds.feedburner.com/ruanyifeng${q}`,
+        ];
+      },
       outbound: {
         'User-Agent': CHROME_UA,
-        Referer: 'http://www.ruanyifeng.com/blog/',
+        Referer: 'https://www.ruanyifeng.com/blog/',
         Accept: 'application/atom+xml, application/xml, text/xml, */*',
       },
+      timeoutMs: 8000,
+      maxAttempts: 1,
     },
     {
       prefix: '/api/bilibili',
