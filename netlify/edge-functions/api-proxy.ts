@@ -178,76 +178,83 @@ function resolveUpstream(pathname: string, search: string): { url: string; outbo
 }
 
 export default async function handler(request: Request): Promise<Response> {
-  const url = new URL(request.url);
-  const resolved = resolveUpstream(url.pathname, url.search);
-  if (!resolved) {
-    return new Response('API proxy: unknown path', { status: 404, headers: { 'content-type': 'text/plain; charset=utf-8' } });
-  }
+  try {
+    const url = new URL(request.url);
+    const resolved = resolveUpstream(url.pathname, url.search);
+    if (!resolved) {
+      return new Response('API proxy: unknown path', { status: 404, headers: { 'content-type': 'text/plain; charset=utf-8' } });
+    }
 
-  const headers = mergeHeaders(request, resolved.outbound);
-  const method = request.method;
+    const headers = mergeHeaders(request, resolved.outbound);
+    const method = request.method;
 
   /**
    * 36 氪热榜是唯一 POST；Netlify Edge 上偶发「请求体未到上游」会导致 gateway 返回 HTML/500，
    * 浏览器 JSON 解析失败 → 列表为空。对 rank/hot 在校验失败或 body 为空时注入与客户端一致的 JSON。
    */
-  let body: BodyInit | undefined;
-  if (method !== 'GET' && method !== 'HEAD') {
-    let text = await request.text();
-    const is36krHot =
-      url.pathname.includes('/api/36kr-gateway') && url.pathname.includes('nav/rank/hot');
-    if (is36krHot) {
-      let payloadOk = false;
-      const t = text.trim();
-      if (t.length > 8) {
-        try {
-          const j = JSON.parse(t) as { partner_id?: unknown; param?: unknown };
-          payloadOk =
-            (j?.partner_id === 'wap' || j?.partner_id === 'web') && j?.param != null;
-        } catch {
-          payloadOk = false;
+    let body: BodyInit | undefined;
+    if (method !== 'GET' && method !== 'HEAD') {
+      let text = await request.text();
+      const is36krHot =
+        url.pathname.includes('/api/36kr-gateway') && url.pathname.includes('nav/rank/hot');
+      if (is36krHot) {
+        let payloadOk = false;
+        const t = text.trim();
+        if (t.length > 8) {
+          try {
+            const j = JSON.parse(t) as { partner_id?: unknown; param?: unknown };
+            payloadOk =
+              (j?.partner_id === 'wap' || j?.partner_id === 'web') && j?.param != null;
+          } catch {
+            payloadOk = false;
+          }
         }
+        if (!payloadOk) {
+          text = JSON.stringify({
+            partner_id: 'wap',
+            param: { siteId: 1, platformId: 2 },
+            timestamp: Date.now(),
+          });
+        }
+        headers.set('content-type', 'application/json; charset=utf-8');
+        body = text;
+      } else {
+        body = text.length > 0 ? text : undefined;
       }
-      if (!payloadOk) {
-        text = JSON.stringify({
-          partner_id: 'wap',
-          param: { siteId: 1, platformId: 2 },
-          timestamp: Date.now(),
-        });
-      }
-      headers.set('content-type', 'application/json; charset=utf-8');
-      body = text;
-    } else {
-      body = text.length > 0 ? text : undefined;
     }
-  }
 
-  const upstream = await fetch(resolved.url, {
-    method,
-    headers,
-    body,
-    redirect: 'follow',
-  });
+    const upstream = await fetch(resolved.url, {
+      method,
+      headers,
+      body,
+      redirect: 'follow',
+    });
 
   /**
    * 勿把 upstream.body 直接管道回浏览器：在 Netlify HTTP/2 下易触发
    * net::ERR_HTTP2_PROTOCOL_ERROR（帧/Content-Length 与流式体不一致）。
    * 先读成 ArrayBuffer 再返回，体量对热榜/RSS 可接受。
    */
-  const buf = await upstream.arrayBuffer();
-  const out = new Headers();
-  const ct = upstream.headers.get('content-type');
-  if (ct) out.set('content-type', ct);
-  else if (buf.byteLength > 0) out.set('content-type', 'application/octet-stream');
-  const cc = upstream.headers.get('cache-control');
-  if (cc) out.set('cache-control', cc);
-  out.set('content-length', String(buf.byteLength));
+    const buf = await upstream.arrayBuffer();
+    const out = new Headers();
+    const ct = upstream.headers.get('content-type');
+    if (ct) out.set('content-type', ct);
+    else if (buf.byteLength > 0) out.set('content-type', 'application/octet-stream');
+    const cc = upstream.headers.get('cache-control');
+    if (cc) out.set('cache-control', cc);
 
-  return new Response(buf, {
-    status: upstream.status,
-    statusText: upstream.statusText,
-    headers: out,
-  });
+    return new Response(buf, {
+      status: upstream.status,
+      statusText: upstream.statusText,
+      headers: out,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'unknown edge proxy error';
+    return new Response(`API proxy failed: ${message}`, {
+      status: 502,
+      headers: { 'content-type': 'text/plain; charset=utf-8' },
+    });
+  }
 }
 
 export const config = { path: '/api/*' };
