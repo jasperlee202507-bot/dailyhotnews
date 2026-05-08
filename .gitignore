@@ -1,0 +1,42 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+dist.zip
+hot-news-dist.zip
+hot-news-deploy.tar.gz
+
+# Coverage
+coverage/
+
+# Environment
+.env
+.env.local
+.env.production
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test
+*.test.js
+*.spec.js
+*.test.ts
+*.spec.ts
+
+# Temporary files
+tmp/
+temp/
+.cache/
