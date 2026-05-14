@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Layout } from '@/components/layout';
-import { PlatformTabs, NewsGrid } from '@/components/news';
+import { PlatformTabs, NewsGrid, MobileDataSourceToggle } from '@/components/news';
 import { useNewsStore } from '@/stores/newsStore';
 import { useAihotStore } from '@/stores/aihotStore';
 import { useDataSourceStore } from '@/stores/dataSourceStore';
@@ -65,6 +65,8 @@ export const Home = () => {
             </p>
           </motion.div>
         </div>
+
+        <MobileDataSourceToggle />
 
         {source !== 'aihot' && <PlatformTabs />}
 
