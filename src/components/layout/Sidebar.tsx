@@ -5,6 +5,7 @@ import { useNewsStore } from '@/stores/newsStore';
 import { useAihotStore } from '@/stores/aihotStore';
 import { useFavoritesStore } from '@/stores/favoritesStore';
 import { useDataSourceStore } from '@/stores/dataSourceStore';
+import { useDetailStore } from '@/stores/detailStore';
 import { formatNumber } from '@/utils/formatters';
 import { platforms } from '@/data/platforms';
 import type { DataSource } from '@/stores/dataSourceStore';
@@ -14,6 +15,7 @@ export const Sidebar = () => {
   const { items: aihotItems, loading: aihotLoading, fetchItems, error: aihotError } = useAihotStore();
   const { favorites } = useFavoritesStore();
   const { source, setSource } = useDataSourceStore();
+  const setSelectedNews = useDetailStore((s) => s.setSelectedNews);
 
   const handleDataSourceChange = (newSource: DataSource) => {
     setSource(newSource);
@@ -111,6 +113,7 @@ export const Sidebar = () => {
                 <Link
                   key={item.id}
                   to={`/detail/${item.id}`}
+                  onClick={() => setSelectedNews(item)}
                   className="block group"
                 >
                   <div className="flex items-start gap-3">

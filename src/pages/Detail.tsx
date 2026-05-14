@@ -3,18 +3,30 @@ import { motion } from 'framer-motion';
 import { ArrowLeft, Heart, Share2, ExternalLink, Clock, Flame, Tag } from 'lucide-react';
 import { Layout } from '@/components/layout';
 import { useDetailStore } from '@/stores/detailStore';
+import { useNewsStore } from '@/stores/newsStore';
+import { useAihotStore } from '@/stores/aihotStore';
 import { useFavoritesStore } from '@/stores/favoritesStore';
 import { formatTime, formatHotScore, getHotLevel } from '@/utils/formatters';
 
 export const Detail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { selectedNews } = useDetailStore();
+  const selectedNews = useDetailStore((s) => s.selectedNews);
+  const newsFromRealtime = useNewsStore((s) =>
+    id ? s.news.find((n) => n.id === id) : undefined
+  );
+  const newsFromAihot = useAihotStore((s) =>
+    id ? s.items.find((n) => n.id === id) : undefined
+  );
   const { isFavorite, toggleFavorite } = useFavoritesStore();
 
-  const news = selectedNews;
+  /** 侧栏 TOP5、收藏、直链等未经过 NewsCard 时不会写入 detailStore，需按 URL 的 id 从列表反查 */
+  const news =
+    newsFromRealtime ??
+    newsFromAihot ??
+    (selectedNews?.id === id ? selectedNews : null);
 
-  if (!news || news.id !== id) {
+  if (!id || !news) {
     return (
       <Layout>
         <div className="flex flex-col items-center justify-center py-20">
@@ -22,7 +34,9 @@ export const Detail = () => {
             <span className="text-4xl">😕</span>
           </div>
           <h3 className="text-lg font-semibold text-text-primary mb-2">热点不存在</h3>
-          <p className="text-text-muted mb-4">该热点可能已被删除或链接错误</p>
+          <p className="text-text-muted mb-4 text-center max-w-sm px-4">
+            该热点可能已被删除或链接错误；若从收藏打开，请先回首页加载列表后再试。
+          </p>
           <Link to="/" className="btn-primary">
             返回首页
           </Link>
