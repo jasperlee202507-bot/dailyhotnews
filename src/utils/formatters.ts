@@ -14,6 +14,25 @@ export const formatTime = (date: Date): string => {
   }
 };
 
+export const formatHotScore = (num: number): string => {
+  if (!Number.isFinite(num) || num <= 0) return '0';
+  if (num >= 1e12) {
+    const v = num / 1e12;
+    const s = v >= 100 ? v.toFixed(0) : v >= 10 ? v.toFixed(1) : v.toFixed(2);
+    return `${parseFloat(s)}万亿`;
+  }
+  if (num >= 1e8) {
+    const v = num / 1e8;
+    const s = v >= 100 ? v.toFixed(0) : v.toFixed(1);
+    return `${parseFloat(s)}亿`;
+  }
+  if (num >= 10000) {
+    const s = (num / 10000).toFixed(1);
+    return `${parseFloat(s)}万`;
+  }
+  return String(Math.round(num));
+};
+
 export const formatNumber = (num: number): string => {
   if (num >= 10000) {
     const result = (num / 10000).toFixed(1);

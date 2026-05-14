@@ -32,21 +32,21 @@ export const PlatformTabs = () => {
                   borderWidth: '1px',
                 } : {}}
               >
-                <span className="text-lg">{platform.icon}</span>
+                <span className="text-base sm:text-lg">{platform.icon}</span>
                 <span>{platform.name}</span>
               </motion.button>
             );
           })}
         </div>
 
-        <div className="absolute right-0 top-0 bottom-2 w-12 bg-gradient-to-l from-background to-transparent pointer-events-none" />
+        <div className="absolute right-0 top-0 bottom-2 w-8 bg-gradient-to-l from-background to-transparent pointer-events-none sm:w-12" />
       </div>
 
       {selectedPlatform !== 'all' && (
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="mt-3 flex items-center gap-2"
+          className="mt-3 flex flex-wrap items-center gap-2"
         >
           <span className="text-sm text-text-muted">当前筛选：</span>
           <span 

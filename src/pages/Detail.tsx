@@ -4,7 +4,7 @@ import { ArrowLeft, Heart, Share2, ExternalLink, Clock, Flame, Tag } from 'lucid
 import { Layout } from '@/components/layout';
 import { useDetailStore } from '@/stores/detailStore';
 import { useFavoritesStore } from '@/stores/favoritesStore';
-import { formatTime, formatNumber, getHotLevel } from '@/utils/formatters';
+import { formatTime, formatHotScore, getHotLevel } from '@/utils/formatters';
 
 export const Detail = () => {
   const { id } = useParams<{ id: string }>();
@@ -57,7 +57,7 @@ export const Detail = () => {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
-        className="max-w-3xl mx-auto"
+        className="mx-auto max-w-3xl px-1 pb-32 sm:px-0 sm:pb-28"
       >
         <button
           onClick={() => navigate(-1)}
@@ -83,18 +83,19 @@ export const Detail = () => {
               )}
             </div>
 
-            <h1 className="text-2xl font-bold font-display text-text-primary leading-tight">
+            <h1 className="break-words text-xl font-bold font-display leading-tight text-text-primary sm:text-2xl">
               {news.title}
             </h1>
 
-            <div className="flex items-center gap-4 text-sm text-text-muted">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-text-muted">
               <span className="flex items-center gap-1">
-                <Clock className="w-4 h-4" />
+                <Clock className="h-4 w-4 shrink-0" />
                 {formatTime(news.publishTime)}
               </span>
-              <span className="flex items-center gap-1">
-                <Flame className="w-4 h-4 text-accent-orange" />
-                {formatNumber(news.hotScore)} 热度
+              <span className="flex min-w-0 items-center gap-1">
+                <Flame className="h-4 w-4 shrink-0 text-accent-orange" />
+                <span className="truncate tabular-nums">{formatHotScore(news.hotScore)}</span>
+                <span className="shrink-0">热度</span>
               </span>
             </div>
 
@@ -118,17 +119,17 @@ export const Detail = () => {
           </div>
         </div>
 
-        <div className="fixed bottom-0 left-0 right-0 p-4 bg-background/80 backdrop-blur-xl border-t border-border/30">
-          <div className="container mx-auto max-w-3xl flex items-center justify-center gap-4">
+        <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-border/30 bg-background/90 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-xl sm:p-4">
+          <div className="mx-auto flex max-w-3xl flex-wrap items-center justify-center gap-2 sm:gap-3">
             <motion.button
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
               onClick={() => toggleFavorite(news.id)}
-              className={`btn-secondary flex items-center gap-2 ${
+              className={`btn-secondary flex min-h-[44px] items-center justify-center gap-2 px-4 text-sm ${
                 isFav ? 'text-red-400 border-red-400/30' : ''
               }`}
             >
-              <Heart className={`w-4 h-4 ${isFav ? 'fill-current' : ''}`} />
+              <Heart className={`h-4 w-4 ${isFav ? 'fill-current' : ''}`} />
               {isFav ? '已收藏' : '收藏'}
             </motion.button>
 
@@ -136,9 +137,9 @@ export const Detail = () => {
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
               onClick={handleShare}
-              className="btn-secondary flex items-center gap-2"
+              className="btn-secondary flex min-h-[44px] items-center justify-center gap-2 px-4 text-sm"
             >
-              <Share2 className="w-4 h-4" />
+              <Share2 className="h-4 w-4" />
               分享
             </motion.button>
 
@@ -148,9 +149,9 @@ export const Detail = () => {
               href={news.originalUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="btn-primary flex items-center gap-2"
+              className="btn-primary flex min-h-[44px] w-full items-center justify-center gap-2 px-5 text-sm sm:w-auto"
             >
-              <ExternalLink className="w-4 h-4" />
+              <ExternalLink className="h-4 w-4" />
               查看原文
             </motion.a>
           </div>

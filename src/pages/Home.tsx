@@ -57,10 +57,10 @@ export const Home = () => {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
           >
-            <h2 className="text-2xl font-bold font-display text-text-primary mb-2">
+            <h2 className="mb-2 break-words text-xl font-bold font-display text-text-primary sm:text-2xl">
               {getTitle()}
             </h2>
-            <p className="text-text-muted">
+            <p className="break-words text-sm text-text-muted sm:text-base">
               {getDescription()}
             </p>
           </motion.div>

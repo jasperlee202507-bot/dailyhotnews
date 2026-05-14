@@ -4,7 +4,7 @@ import { Heart, Clock, Flame } from 'lucide-react';
 import { NewsItem } from '@/types';
 import { useFavoritesStore } from '@/stores/favoritesStore';
 import { useDetailStore } from '@/stores/detailStore';
-import { formatTime, formatNumber, getHotLevel } from '@/utils/formatters';
+import { formatTime, formatHotScore, getHotLevel } from '@/utils/formatters';
 
 interface NewsCardProps {
   news: NewsItem;
@@ -39,29 +39,31 @@ export const NewsCard = ({ news, index }: NewsCardProps) => {
           className="news-card relative cursor-pointer flex flex-col min-h-[140px]"
           style={{ borderLeftColor: news.sourceColor, borderLeftWidth: '3px' }}
         >
-          <div className="flex flex-wrap items-center gap-2 gap-y-1.5 text-xs text-text-muted mb-2 pr-10">
+          <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1.5 pr-11 text-xs text-text-muted sm:pr-10">
             <span
-              className="font-medium px-2 py-0.5 rounded-md"
+              className="shrink-0 font-medium px-2 py-0.5 rounded-md"
               style={{ backgroundColor: `${news.sourceColor}18`, color: news.sourceColor }}
             >
               {news.sourceName}
             </span>
-            <span className="flex items-center gap-1">
-              <Clock className="w-3 h-3 shrink-0 opacity-70" />
+            <span className="flex shrink-0 items-center gap-1">
+              <Clock className="h-3 w-3 shrink-0 opacity-70" />
               {formatTime(news.publishTime)}
             </span>
-            <span className="flex items-center gap-1 text-text-secondary">
-              <Flame className="w-3 h-3 shrink-0 text-accent-orange" />
-              {formatNumber(news.hotScore)}
+            <span className="flex min-w-0 max-w-full flex-[1_1_220px] items-center gap-1 text-text-secondary sm:flex-[0_1_auto] sm:max-w-md">
+              <Flame className="h-3 w-3 shrink-0 text-accent-orange" />
+              <span className="truncate tabular-nums">{formatHotScore(news.hotScore)}</span>
             </span>
             {hotLevel.label && (
-              <span className={`ml-auto font-bold ${hotLevel.color} bg-current/10 px-1.5 py-0.5 rounded`}>
+              <span
+                className={`shrink-0 rounded px-1.5 py-0.5 font-bold ${hotLevel.color} bg-current/10 sm:ml-0`}
+              >
                 {hotLevel.label}
               </span>
             )}
           </div>
 
-          <h3 className="text-base font-semibold text-text-primary leading-snug line-clamp-3 group-hover:text-accent-amber transition-colors mb-2">
+          <h3 className="mb-2 line-clamp-3 text-[15px] font-semibold leading-snug text-text-primary sm:text-base group-hover:text-accent-amber transition-colors">
             {news.title}
           </h3>
 
@@ -81,7 +83,7 @@ export const NewsCard = ({ news, index }: NewsCardProps) => {
             ))}
           </div>
 
-          <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <div className="absolute right-2 top-2 flex items-center gap-1 opacity-100 transition-opacity lg:opacity-0 lg:group-hover:opacity-100">
             <motion.button
               whileHover={{ scale: 1.08 }}
               whileTap={{ scale: 0.92 }}
